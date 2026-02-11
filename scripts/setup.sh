@@ -83,10 +83,12 @@ until docker compose exec -T postgres pg_isready -U custodiam &> /dev/null; do
 done
 echo " ✅"
 
-# Esperar Keycloak (puede tardar ~60s)
+# Esperar Keycloak (puede tardar ~90s)
+# Nota: /health/ready está en puerto 9000 (management), pero desde el host
+# verificamos el puerto principal 8080 que ya está mapeado en dev.yml
 echo -n "   Keycloak: "
 for i in {1..30}; do
-    if curl -sf http://localhost:8080/health/ready &> /dev/null; then
+    if curl -sf http://localhost:8080 &> /dev/null; then
         echo " ✅"
         break
     fi
