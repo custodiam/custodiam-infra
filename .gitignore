@@ -1,0 +1,10 @@
+# Env con secrets
+docker/.env
+
+# Datos locales
+*.bak
+*.sql
+
+# IDE
+.idea/
+.vscode/
