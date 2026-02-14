@@ -1,0 +1,169 @@
+# docker/docker-compose.yml
+name: custodiam
+
+services:
+  # ============ BASE DE DATOS ============
+  # Una instancia PostgreSQL con 2 bases de datos:
+  #   - custodiam    → API (FastAPI + Alembic)
+  #   - custodiam_kc → Keycloak (tablas internas)
+  # Separadas para que Alembic no detecte las tablas de Keycloak.
+  postgres:
+    image: postgres:15-alpine
+    container_name: custodiam-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-custodiam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-custodiam}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-custodiam_kc}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-custodiam}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - custodiam-net
+
+  # ============ AUTENTICACIÓN ============
+  # Keycloak usa su propia BD (custodiam_kc) dentro del mismo PostgreSQL
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: custodiam-auth
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB:-custodiam_kc}
+      KC_DB_USERNAME: ${POSTGRES_USER:-custodiam}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME: auth.${DOMAIN:-localhost}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    command: start
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
+    restart: unless-stopped
+    networks:
+      - custodiam-net
+
+  # ============ BACKEND API ============
+  api:
+    image: ghcr.io/custodiam/custodiam-api:${API_VERSION:-latest}
+    container_name: custodiam-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-custodiam}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-custodiam}
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: https://auth.${DOMAIN:-localhost}
+      KEYCLOAK_REALM: custodiam
+      NTFY_URL: http://ntfy:80
+      FIREBASE_CREDENTIALS: ${FIREBASE_CREDENTIALS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - custodiam-net
+
+  # ============ PANEL WEB (Flutter + Nginx) ============
+  web:
+    image: ghcr.io/custodiam/custodiam-app:${APP_VERSION:-latest}
+    container_name: custodiam-web
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - custodiam-net
+
+  # ============ NOTIFICACIONES ============
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: custodiam-ntfy
+    command: serve
+    environment:
+      NTFY_BASE_URL: https://ntfy.${DOMAIN:-localhost}
+      NTFY_BEHIND_PROXY: "true"
+    volumes:
+      - ntfy_data:/var/lib/ntfy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - custodiam-net
+
+  # ============ AUTOMATIZACIONES (POST-MVP) ============
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: custodiam-n8n
+    environment:
+      N8N_HOST: n8n.${DOMAIN:-localhost}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://n8n.${DOMAIN:-localhost}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - custodiam-net
+    profiles:
+      - full  # Solo se levanta con: docker compose --profile full up
+
+  # ============ TÚNEL CLOUDFLARE ============
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: custodiam-tunnel
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - api
+      - keycloak
+      - web
+      - ntfy
+    restart: unless-stopped
+    networks:
+      - custodiam-net
+    profiles:
+      - tunnel  # Solo se levanta con --profile tunnel
+
+volumes:
+  postgres_data:
+  ntfy_data:
+  n8n_data:
+
+networks:
+  custodiam-net:
+    driver: bridge
