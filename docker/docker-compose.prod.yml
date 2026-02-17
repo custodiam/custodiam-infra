@@ -1,0 +1,15 @@
+# docker/docker-compose.prod.yml
+# Uso: docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile tunnel up -d
+
+services:
+  keycloak:
+    environment:
+      KC_HOSTNAME_STRICT: "true"
+
+  api:
+    environment:
+      DEBUG: "false"
+
+  # Activar túnel Cloudflare
+  cloudflared:
+    profiles: []  # Eliminar profile para que siempre se levante

@@ -1,0 +1,40 @@
+# docker/docker-compose.dev.yml
+# Uso: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # Exponer puertos localmente
+  postgres:
+    ports:
+      - "5432:5432"
+
+  keycloak:
+    command: start-dev
+    ports:
+      - "8080:8080"
+
+  ntfy:
+    ports:
+      - "8090:80"
+
+  # API: build local en vez de imagen GHCR
+  api:
+    build:
+      context: ../../custodiam-api
+      dockerfile: Dockerfile
+    image: custodiam-api:dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../custodiam-api/app:/app/app:ro  # Hot reload (solo lectura)
+    environment:
+      DEBUG: "true"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Web: build local en vez de imagen GHCR
+  web:
+    build:
+      context: ../../custodiam-app
+      dockerfile: Dockerfile
+    image: custodiam-app:dev
+    ports:
+      - "3000:80"
