@@ -8,3 +8,6 @@ docker/.env
 # IDE
 .idea/
 .vscode/
+
+# Claude Code (local, no commitear)
+.claude/
