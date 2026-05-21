@@ -44,7 +44,9 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-    command: start
+    volumes:
+      - ../keycloak/realm-custodiam.json:/opt/keycloak/data/import/realm-custodiam.json:ro
+    command: start --import-realm
     depends_on:
       postgres:
         condition: service_healthy
