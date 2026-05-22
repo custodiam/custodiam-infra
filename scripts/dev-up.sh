@@ -10,6 +10,10 @@
 #     URLs that match the device traversal via adb reverse (see guía 10
 #     §2.6).
 #
+# Reads docker/.env.sops (encrypted) when present and decrypts it to a
+# temp file consumed via `--env-file`. Falls back to docker/.env (plain,
+# gitignored) if .env.sops is missing. See guía 04 (gestión de secretos).
+#
 # Usage: ./scripts/dev-up.sh
 #
 # Companion scripts:
@@ -22,8 +26,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
+CLEANUP_FILES=()
+trap '[[ ${#CLEANUP_FILES[@]} -gt 0 ]] && rm -f "${CLEANUP_FILES[@]}"' EXIT INT TERM
+# shellcheck source=./_lib-env.sh
+source "$(dirname "$0")/_lib-env.sh"
+resolve_env_file
+
 echo "==> Starting Custodiam dev stack (base + dev override)"
 docker compose \
+  --env-file "$ENV_FILE" \
   -f docker/docker-compose.yml \
   -f docker/docker-compose.dev.yml \
   up -d
