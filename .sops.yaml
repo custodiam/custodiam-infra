@@ -1,0 +1,18 @@
+# sops + age configuration for custodiam-infra
+#
+# Any dotenv file matching the regex below is encrypted with the age
+# public keys listed. Adding a new recipient means appending the new
+# public key here and running:
+#
+#   sops updatekeys docker/.env.sops
+#
+# The corresponding private keys live in each developer's machine, at
+# ~/.config/sops/age/keys.txt. See guía 04 (gestión de secretos).
+#
+# Default key/value behaviour for dotenv input (no encrypted_regex
+# override): keys stay readable, values get cifradas. That is what
+# enables the per-secret diff in git log -p docker/.env.sops.
+
+creation_rules:
+  - path_regex: \.env(\.sops)?$
+    age: age1utaa5hjcj5u9rkq23vl8m73dzjdhuwat6t4fp6zndadeg2ksm4uqjlskvg
