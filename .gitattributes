@@ -3,3 +3,16 @@
 # bash shebang followed by a CRLF, breaking ./scripts/*.sh transparently
 # for any developer with core.autocrlf=true.
 *.sh text eol=lf
+
+# sops-encrypted files carry a MAC over the exact bytes that were
+# encrypted. A core.autocrlf=true checkout would flip LF to CRLF on
+# Windows and make every sops decrypt fail with a MAC mismatch. Force
+# LF for the encrypted payload and its config so any platform sees the
+# same bytes.
+.env.sops text eol=lf
+.sops.yaml text eol=lf
+
+# Dotenv files (plain and templates) stay LF too. They get read by
+# docker compose and by shell scripts that don't tolerate CRLF either.
+.env text eol=lf
+.env.* text eol=lf

@@ -10,6 +10,10 @@
 #   - api and web are pulled from GHCR. If those pulls fail (private
 #     registry or rate-limited), use --skip-images to avoid them.
 #
+# Reads docker/.env.sops (encrypted) when present and decrypts it to a
+# temp file consumed via `--env-file`. Falls back to docker/.env (plain,
+# gitignored) if .env.sops is missing. See guía 04 (gestión de secretos).
+#
 # Usage:
 #   ./scripts/tunnel-up.sh                       # full stack via tunnel
 #   ./scripts/tunnel-up.sh --skip-images         # only postgres + keycloak
@@ -39,13 +43,19 @@ for arg in "$@"; do
   esac
 done
 
+CLEANUP_FILES=()
+trap '[[ ${#CLEANUP_FILES[@]} -gt 0 ]] && rm -f "${CLEANUP_FILES[@]}"' EXIT INT TERM
+# shellcheck source=./_lib-env.sh
+source "$(dirname "$0")/_lib-env.sh"
+resolve_env_file
+
 if $SKIP_IMAGES; then
   echo "==> Starting tunnel stack WITHOUT api/web (skip-images mode)"
-  docker compose -f docker/docker-compose.yml --profile tunnel up -d postgres keycloak
-  docker compose -f docker/docker-compose.yml --profile tunnel up -d cloudflared --no-deps
+  docker compose --env-file "$ENV_FILE" -f docker/docker-compose.yml --profile tunnel up -d postgres keycloak
+  docker compose --env-file "$ENV_FILE" -f docker/docker-compose.yml --profile tunnel up -d cloudflared --no-deps
 else
   echo "==> Starting tunnel stack (full)"
-  docker compose -f docker/docker-compose.yml --profile tunnel up -d
+  docker compose --env-file "$ENV_FILE" -f docker/docker-compose.yml --profile tunnel up -d
 fi
 
 echo

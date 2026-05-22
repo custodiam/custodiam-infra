@@ -5,7 +5,14 @@ Infraestructura Docker y configuraciones para desplegar Custodiam.
 ## Inicio rápido
 
 ```bash
-# Configurar
+# Configurar — opción A (recomendada): usar el .env.sops cifrado del repo.
+# Requiere tener tu clave age privada en ~/.config/sops/age/keys.txt y la
+# pública añadida en .sops.yaml. Ver la guía 04 (gestión de secretos) del
+# repo privado de documentación para el setup completo.
+# Los wrappers descifran .env.sops a un tempfile al arrancar, sin acción
+# manual adicional.
+
+# Configurar — opción B (fallback, sin sops): usar la plantilla plana.
 cp docker/.env.example docker/.env
 # Editar docker/.env con tus passwords (POSTGRES_PASSWORD, KEYCLOAK_PASSWORD, DOMAIN, ...)
 
@@ -17,6 +24,27 @@ cp docker/.env.example docker/.env
 
 # Bajar el stack (los volúmenes con datos se conservan)
 ./scripts/down.sh
+```
+
+## Gestión de secretos (sops + age)
+
+El fichero `docker/.env.sops` es la fuente de verdad para entornos del equipo: vive **cifrado** en el repo con [sops](https://github.com/getsops/sops) + [age](https://github.com/FiloSottile/age) (lista de destinatarios en `.sops.yaml`). El `.env` plano está gitignored y solo existe en la máquina del dev.
+
+Los wrappers `dev-up.sh` y `tunnel-up.sh` detectan `.env.sops` automáticamente, lo descifran a un tempfile con `trap` de limpieza y lo pasan a compose vía `--env-file`. Si no existe, caen al `.env` plano como fallback.
+
+Operaciones canónicas (más detalle en la guía 04):
+
+```bash
+# Rotar un secret
+sops docker/.env.sops                 # abre editor, edita, guarda
+
+# Añadir destinatario nuevo (otro dev)
+# 1. Editar .sops.yaml y añadir la clave pública age
+# 2. Re-cifrar reconociendo el nuevo destinatario
+sops updatekeys docker/.env.sops
+
+# Ver qué cambió entre commits
+git log -p docker/.env.sops           # muestra qué claves cambian (valores cifrados)
 ```
 
 ## Scripts de operación
