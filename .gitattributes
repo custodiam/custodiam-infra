@@ -1,0 +1,5 @@
+# Shell scripts must stay LF-only on every platform: Git Bash on
+# Windows and Docker containers both refuse to interpret a #!/usr/bin/env
+# bash shebang followed by a CRLF, breaking ./scripts/*.sh transparently
+# for any developer with core.autocrlf=true.
+*.sh text eol=lf
