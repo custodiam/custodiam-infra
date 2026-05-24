@@ -5,9 +5,12 @@
 # Applies the prod override on top of the base compose file, which:
 #   - keeps KC_HOSTNAME=auth.${DOMAIN} (base value, public);
 #   - tightens to KC_HOSTNAME_STRICT=true (Host header validation);
-#   - sets DEBUG=false on the API;
-#   - lifts cloudflared out of the [tunnel] profile so it starts
-#     automatically as part of the stack (no --profile flag needed).
+#   - sets DEBUG=false on the API.
+#
+# cloudflared remains in the [tunnel] profile declared in the base file,
+# so this script invokes compose with --profile tunnel (same as
+# tunnel-up.sh). The prod override applies only to services already in
+# the default profile (keycloak, api).
 #
 # Reads docker/.env.sops (encrypted) when present and decrypts it to a
 # temp file consumed via `--env-file`. Falls back to docker/.env (plain,
@@ -59,24 +62,26 @@ if ! grep -q "^CLOUDFLARE_TUNNEL_TOKEN=." "$ENV_FILE"; then
   exit 1
 fi
 
-echo "==> Pulling images from GHCR (api, web)"
+echo "==> Pulling images from GHCR (api, web, cloudflared)"
 docker compose \
   --env-file "$ENV_FILE" \
   -f docker/docker-compose.yml \
   -f docker/docker-compose.prod.yml \
+  --profile tunnel \
   pull
 
 echo
-echo "==> Starting Custodiam production stack (base + prod override)"
+echo "==> Starting Custodiam production stack (base + prod override + tunnel profile)"
 docker compose \
   --env-file "$ENV_FILE" \
   -f docker/docker-compose.yml \
   -f docker/docker-compose.prod.yml \
+  --profile tunnel \
   up -d
 
 echo
 echo "==> Stack status:"
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml ps
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml --profile tunnel ps
 
 cat <<'TIP'
 
