@@ -1794,7 +1794,18 @@
     "xXSSProtection": "1; mode=block",
     "strictTransportSecurity": "max-age=31536000; includeSubDomains"
   },
-  "smtpServer": {},
+  "smtpServer": {
+    "host": "smtp-relay.brevo.com",
+    "port": "587",
+    "starttls": "true",
+    "auth": "true",
+    "from": "noreply@custodiam.es",
+    "fromDisplayName": "CustodIAM",
+    "replyTo": "soporte@custodiam.es",
+    "replyToDisplayName": "Soporte CustodIAM",
+    "user": "${env.KEYCLOAK_SMTP_USERNAME}",
+    "password": "${env.KEYCLOAK_SMTP_PASSWORD}"
+  },
   "eventsEnabled": false,
   "eventsListeners": [
     "jboss-logging"

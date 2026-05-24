@@ -44,6 +44,10 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      # SMTP credentials (Brevo) consumed by realm-custodiam.json via ${env.VAR} placeholders.
+      # See ADR-021 and EN-08-30. Values live encrypted in docker/.env.sops.
+      KEYCLOAK_SMTP_USERNAME: ${KEYCLOAK_SMTP_USERNAME}
+      KEYCLOAK_SMTP_PASSWORD: ${KEYCLOAK_SMTP_PASSWORD}
     volumes:
       - ../keycloak/realm-custodiam.json:/opt/keycloak/data/import/realm-custodiam.json:ro
     command: start --import-realm
