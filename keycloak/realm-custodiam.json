@@ -1795,7 +1795,7 @@
     "strictTransportSecurity": "max-age=31536000; includeSubDomains"
   },
   "smtpServer": {
-    "host": "smtp-relay.brevo.com",
+    "host": "smtp.resend.com",
     "port": "587",
     "starttls": "true",
     "auth": "true",
