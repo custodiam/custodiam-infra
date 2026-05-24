@@ -1800,9 +1800,9 @@
     "starttls": "true",
     "auth": "true",
     "from": "noreply@custodiam.es",
-    "fromDisplayName": "CustodIAM",
+    "fromDisplayName": "Custodiam",
     "replyTo": "soporte@custodiam.es",
-    "replyToDisplayName": "Soporte CustodIAM",
+    "replyToDisplayName": "Soporte Custodiam",
     "user": "${env.KEYCLOAK_SMTP_USERNAME}",
     "password": "${env.KEYCLOAK_SMTP_PASSWORD}"
   },
