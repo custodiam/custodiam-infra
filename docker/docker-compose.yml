@@ -106,7 +106,10 @@ services:
 
   # ============ NOTIFICACIONES ============
   ntfy:
-    image: binwiederhier/ntfy:latest
+    # Pinned to v2.23.0 (release 2026-05-17). Promote to a newer SemVer
+    # tag deliberately when reviewing changelog at
+    # https://github.com/binwiederhier/ntfy/releases.
+    image: binwiederhier/ntfy:v2.23.0
     container_name: custodiam-ntfy
     command: serve
     environment:
@@ -125,7 +128,11 @@ services:
 
   # ============ AUTOMATIZACIONES (POST-MVP) ============
   n8n:
-    image: n8nio/n8n:latest
+    # Pinned to 2.21.7 (the version published as `latest` on Docker Hub
+    # at audit time, verified via `docker inspect`). Promote to a newer
+    # SemVer tag deliberately when reviewing changelog at
+    # https://docs.n8n.io/release-notes/.
+    image: n8nio/n8n:2.21.7
     container_name: custodiam-n8n
     environment:
       N8N_HOST: n8n.${DOMAIN:-localhost}
@@ -176,7 +183,12 @@ services:
 
   # ============ TÚNEL CLOUDFLARE ============
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # Pinned to 2026.5.1 (release 2026-05-25, build verified via
+    # docker inspect CI_BUILD_DATE label). Cloudflare publishes
+    # calendar-versioned releases at
+    # https://github.com/cloudflare/cloudflared/releases — promote
+    # deliberately, never let `:latest` drift through prod.
+    image: cloudflare/cloudflared:2026.5.1
     container_name: custodiam-tunnel
     command: tunnel run
     environment:
