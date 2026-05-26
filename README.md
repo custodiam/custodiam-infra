@@ -1,6 +1,8 @@
 # Custodiam Infra
 
-Infraestructura Docker y configuraciones para desplegar Custodiam.
+Infraestructura Docker y configuraciones para desplegar **Custodiam**, sistema multiplataforma de gestión para agrupaciones de Protección Civil.
+
+📚 **Documentación completa:** <https://docs.custodiam.es>
 
 ## Inicio rápido
 
@@ -18,13 +20,18 @@ cp docker/.env.example docker/.env
 
 # Levantar el stack en modo desarrollo local
 ./scripts/dev-up.sh
+# o, con just (interfaz preferida, recomendada): `just dev`
 
 # Sembrar los usuarios de test del realm custodiam (admin + voluntario)
 ./scripts/seed-test-users.sh
+# o con just: `just seed`
 
 # Bajar el stack (los volúmenes con datos se conservan)
 ./scripts/down.sh
+# o con just: `just down`
 ```
+
+> **just como interfaz preferida (desde EN-08-31):** los scripts shell siguen siendo el **contrato canónico**, pero `just` los envuelve con atajos más cortos (`just dev`, `just tunnel`, `just prod`, `just down`, `just seed`, `just status`, `just logs-api`...). Instalación: `winget install Casey.Just` (Windows) · `brew install just` (macOS) · `cargo install just` (Linux). Ver `justfile` en la raíz del repo para el catálogo completo de recetas, o ejecutar `just --list`.
 
 ## Gestión de secretos (sops + age)
 
@@ -87,10 +94,17 @@ curl http://localhost:8888/default/.well-known/openid-configuration
 docker compose --profile test down
 ```
 
+## Más información
+
+- **[docs.custodiam.es/empezar/infra](https://docs.custodiam.es/empezar/infra/)** — recorrido detallado de instalación con prerequisitos y troubleshooting.
+- **[docs.custodiam.es/arquitectura](https://docs.custodiam.es/arquitectura/)** — diagrama de la topología de despliegue, modos dev/tunnel/prod, decisiones.
+- **[docs.custodiam.es/adrs](https://docs.custodiam.es/adrs/)** — registro de decisiones (incl. Docker Compose, 2 BDs separadas, sops + age, tres modos de despliegue).
+
 ## Repos relacionados
 
-- [custodiam-app](https://github.com/custodiam/custodiam-app) — App Flutter
-- [custodiam-api](https://github.com/custodiam/custodiam-api) — Backend FastAPI
+- [custodiam-app](https://github.com/custodiam/custodiam-app) — App Flutter (Android + iOS + Web)
+- [custodiam-api](https://github.com/custodiam/custodiam-api) — Backend FastAPI + SQLModel
+- [custodiam-book](https://github.com/custodiam/custodiam-book) — Source del book de documentación pública
 
 ## Licencia
 
