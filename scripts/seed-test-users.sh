@@ -11,19 +11,32 @@
 # Users created
 # -------------
 #
-# | username | password    | rol KC             | BD row | Used to exercise                                            |
-# |----------|-------------|--------------------|--------|-------------------------------------------------------------|
-# | vol1     | Vol1Pass!   | voluntario         |   yes  | mi-perfil, /voluntarios (lista), "Sin acceso" en alta/ficha |
-# | jefe1    | Jefe1Pass!  | jefe_equipo        |   yes  | ficha admin read-only, banner comando operativo             |
-# | coord1   | Coord1Pass! | coordinador        |   yes  | admin operativo completo (alta, ficha edit, cambio rol)     |
-# | tesor1   | Tesor1Pass! | tesorero           |   yes  | caso edge: lista + ficha sí, editar/crear no                |
-# | admin1   | Admin1Pass! | admin              |    no  | admin técnico puro: /mi-perfil debe mostrar "Sin acceso"    |
+# | username    | password    | rol KC             | BD row | Asignación BD     | Used to exercise                                            |
+# |-------------|-------------|--------------------|--------|-------------------|-------------------------------------------------------------|
+# | vol1        | vol1        | voluntario         |   yes  | voluntario        | mi-perfil, /voluntarios (lista), "Sin acceso" en alta/ficha |
+# | jefe1       | jefe1       | jefe_equipo        |   yes  | jefe_equipo       | ficha admin read-only, banner comando operativo             |
+# | coord1      | coord1      | coordinador        |   yes  | coordinador       | admin operativo completo (alta, ficha edit, cambio rol)     |
+# | tesor1      | tesor1      | tesorero           |   yes  | tesorero          | caso edge: lista + ficha sí, editar/crear no                |
+# | admin       | admin       | admin              |   yes  | admin             | flujos del admin técnico (permisos sistema.*)               |
+# | reviewstore | reviewstore | coordinador+admin  |   yes  | coordinador       | cuenta de revisión de stores: cobertura total (operativa+sistema) |
+# | superadmin  | superadmin  | coordinador+admin  |   yes  | coordinador       | cuenta de emergencia del equipo: cobertura total            |
 #
-# admin1 intentionally has no BD row: that is exactly the scenario we
-# want to verify ("usuario Keycloak sin fila vinculada" → 404 →
-# AppEmptyState 'Sin perfil'). Every other user has both the KC
-# account and the BD row plus an active assignment in
-# voluntario_roles, so the admin ficha shows their role.
+# Doctrina del seed: las siete cuentas siguen el patrón password =
+# username. Es deliberadamente débil porque el repo es público y las
+# credenciales aparecen en el book público (docs.custodiam.es) y, en
+# el caso de reviewstore, en la submission de Google Play y Apple
+# App Store. Esto NO es una postura sobre seguridad de producción
+# real: estas cuentas son SACRIFICABLES y solo se usan para QA del
+# equipo, defensa académica y review de stores. Cuando una
+# agrupación adopte Custodiam para uso productivo real, las cuentas
+# humanas se crean por el flujo normal de alta de voluntario y este
+# seed deja de ejecutarse.
+#
+# Las dos cuentas con admin + coordinador (reviewstore y superadmin)
+# están separadas por audiencia, no por capacidad: reviewstore es
+# visible a Google Play / Apple, superadmin es para administración
+# interna del piloto. Permite rotar credenciales o eliminar una sin
+# afectar a la otra.
 #
 # Why ASCII-only names: bash on Git Bash for Windows routes subprocess
 # arguments through cp1252 before CreateProcessW, which mojibakes any
@@ -70,11 +83,22 @@ REALM="custodiam"
 PG_USER="${POSTGRES_USER:-custodiam}"
 PG_DB="${POSTGRES_DB:-custodiam}"
 
+# Compose override applied on top of docker-compose.yml when running
+# `docker compose exec postgres`. Defaults to the dev override (local
+# stack with exposed ports) but can be set to the prod override when
+# seeding against the productive stack from the host server:
+#
+#   COMPOSE_OVERRIDE=docker/docker-compose.prod.yml \
+#   KC_BASE=https://auth.custodiam.es \
+#   KEYCLOAK_PASSWORD=<el real> \
+#     ./scripts/seed-test-users.sh
+COMPOSE_OVERRIDE="${COMPOSE_OVERRIDE:-docker/docker-compose.dev.yml}"
+
 # ── Pre-flight: roles catalog must be seeded ──────────────────────────
 
 echo "==> Checking that the 'roles' catalog has been seeded"
 ROLES_COUNT=$(
-  docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+  docker compose -f docker/docker-compose.yml -f "$COMPOSE_OVERRIDE" \
     exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -tA -c "SELECT COUNT(*) FROM roles;" \
     2>/dev/null | tr -d '[:space:]' || echo "0"
 )
@@ -195,7 +219,7 @@ upsert_db_voluntario() {
 
   echo "==> Ensuring BD row for kc_id $kc_id (rol $rol_nombre)"
 
-  docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+  docker compose -f docker/docker-compose.yml -f "$COMPOSE_OVERRIDE" \
     exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 <<-EOSQL
     -- Voluntario row: insert only if no row exists for this keycloak_id.
     -- Using gen_random_uuid() (PostgreSQL native) for the primary key.
@@ -235,42 +259,74 @@ EOSQL
 # ── Seed users ────────────────────────────────────────────────────────
 
 # vol1 — voluntario operativo. Tiene fila BD + asignación rol.
-KC_VOL1=$(upsert_kc_user "vol1" "Vol1Pass!" "Pedro" "Sanchez" \
+KC_VOL1=$(upsert_kc_user "vol1" "vol1" "Pedro" "Sanchez" \
   "vol1@custodiam.test" "voluntario")
 upsert_db_voluntario "$KC_VOL1" "Pedro Sanchez" "600100001" "Zuera" \
   "1990-03-15" "vol1@custodiam.test" "voluntario"
 
 # jefe1 — jefe de equipo. Activa ficha admin read-only + comando.
-KC_JEFE1=$(upsert_kc_user "jefe1" "Jefe1Pass!" "Lucia" "Martinez" \
+KC_JEFE1=$(upsert_kc_user "jefe1" "jefe1" "Lucia" "Martinez" \
   "jefe1@custodiam.test" "jefe_equipo")
 upsert_db_voluntario "$KC_JEFE1" "Lucia Martinez" "600100002" \
   "Villanueva de Gallego" "1985-07-22" "jefe1@custodiam.test" "jefe_equipo"
 
 # coord1 — coordinador. Admin operativo completo.
-KC_COORD1=$(upsert_kc_user "coord1" "Coord1Pass!" "Carlos" "Lopez" \
+KC_COORD1=$(upsert_kc_user "coord1" "coord1" "Carlos" "Lopez" \
   "coord1@custodiam.test" "coordinador")
 upsert_db_voluntario "$KC_COORD1" "Carlos Lopez" "600100003" \
   "San Mateo de Gallego" "1980-11-08" "coord1@custodiam.test" "coordinador"
 
 # tesor1 — tesorero. Caso edge: lectura sí, edición/creación no.
-KC_TESOR1=$(upsert_kc_user "tesor1" "Tesor1Pass!" "Marta" "Ruiz" \
+KC_TESOR1=$(upsert_kc_user "tesor1" "tesor1" "Marta" "Ruiz" \
   "tesor1@custodiam.test" "tesorero")
 upsert_db_voluntario "$KC_TESOR1" "Marta Ruiz" "600100004" "Zuera" \
   "1988-02-19" "tesor1@custodiam.test" "tesorero"
 
-# admin1 — admin técnico puro. Intencionalmente SIN fila en BD: queremos
-# verificar que /mi-perfil cae al estado 'Sin perfil' cuando no hay
-# row vinculada al keycloak_id. No se llama upsert_db_voluntario.
-upsert_kc_user "admin1" "Admin1Pass!" "Admin" "Tecnico" \
-  "admin1@custodiam.test" "admin" > /dev/null
+# admin — admin técnico puro del catálogo de roles. Tiene fila en BD
+# con asignación del rol admin para que /mi-perfil renderice su perfil
+# y la sección de roles muestre 'admin' explícitamente. El flujo edge
+# 'usuario Keycloak sin fila BD vinculada' sigue cubierto por código
+# (AppEmptyState) y por tests E2E del mock OIDC server; no necesita un
+# usuario seed específico para reproducirlo.
+KC_ADMIN=$(upsert_kc_user "admin" "admin" "Admin" "Tecnico" \
+  "admin@custodiam.test" "admin")
+upsert_db_voluntario "$KC_ADMIN" "Admin Tecnico" "600100005" "Zaragoza" \
+  "1980-01-01" "admin@custodiam.test" "admin"
+
+# reviewstore — cuenta pública para la revisión de Google Play y App
+# Store. Doble rol en Keycloak (coordinador + admin) para cobertura
+# total: el coordinador habilita todo el dominio operativo (servicios,
+# voluntarios, inventario, fichaje, notificaciones) y admin añade los
+# permisos sistema.*. Fila en BD con asignación de coordinador para
+# que /mi-perfil renderice un perfil válido; el admin no se
+# materialisa en voluntario_roles porque cuando hay solapamiento
+# coord+admin, coord es el rol operativo "visible" en la ficha.
+# Password = username porque la credencial aparece en la submission
+# pública de las stores.
+KC_REVIEW=$(upsert_kc_user "reviewstore" "reviewstore" "Review" "Stores" \
+  "reviewstore@custodiam.test" "coordinador" "admin")
+upsert_db_voluntario "$KC_REVIEW" "Review Stores" "600100099" "Zaragoza" \
+  "1990-01-01" "reviewstore@custodiam.test" "coordinador"
+
+# superadmin — cuenta de emergencia del equipo. Misma cobertura que
+# reviewstore (coordinador + admin) pero con audiencia distinta:
+# administración interna del piloto, no revisión externa. Permite
+# rotar credenciales o eliminar reviewstore sin perder acceso de
+# emergencia, y viceversa.
+KC_SUPER=$(upsert_kc_user "superadmin" "superadmin" "Super" "Admin" \
+  "superadmin@custodiam.test" "coordinador" "admin")
+upsert_db_voluntario "$KC_SUPER" "Super Admin" "600100098" "Zaragoza" \
+  "1985-01-01" "superadmin@custodiam.test" "coordinador"
 
 echo
-echo "==> Done. 5 test users seeded."
+echo "==> Done. 7 test users seeded."
 echo
-echo "    vol1     / Vol1Pass!     (voluntario)"
-echo "    jefe1    / Jefe1Pass!    (jefe_equipo)"
-echo "    coord1   / Coord1Pass!   (coordinador)"
-echo "    tesor1   / Tesor1Pass!   (tesorero)"
-echo "    admin1   / Admin1Pass!   (admin, sin row en BD)"
+echo "    vol1        / vol1        (voluntario)"
+echo "    jefe1       / jefe1       (jefe_equipo)"
+echo "    coord1      / coord1      (coordinador)"
+echo "    tesor1      / tesor1      (tesorero)"
+echo "    admin       / admin       (admin tecnico, con row en BD)"
+echo "    reviewstore / reviewstore (coordinador + admin, cuenta de stores)"
+echo "    superadmin  / superadmin  (coordinador + admin, cuenta de emergencia del equipo)"
 echo
-echo "    Login en app.custodiam.es o http://localhost (según entorno)."
+echo "    Login en app.custodiam.es o http://localhost (segun entorno)."
