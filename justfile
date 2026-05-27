@@ -37,8 +37,19 @@ prod:
 down:
     ./scripts/down.sh
 
-# Sembrar usuarios de test (admin + voluntario) en el realm vía Admin API
+# Sembrar las 7 cuentas de test (vol1, jefe1, coord1, tesor1, admin, reviewstore, superadmin) en el realm de DESARROLLO
 seed:
+    ./scripts/seed-test-users.sh
+
+# Sembrar las 7 cuentas en el realm de PRODUCCIÓN (auth.custodiam.es). Requiere KEYCLOAK_PASSWORD en el entorno.
+seed-prod:
+    @if [ -z "$KEYCLOAK_PASSWORD" ]; then \
+        echo "ERROR: KEYCLOAK_PASSWORD no está definida en el entorno."; \
+        echo "       Lánzala así:  KEYCLOAK_PASSWORD=<la real> just seed-prod"; \
+        exit 1; \
+    fi
+    COMPOSE_OVERRIDE=docker/docker-compose.prod.yml \
+    KC_BASE=https://auth.custodiam.es \
     ./scripts/seed-test-users.sh
 
 # Ver los logs del servicio Keycloak (Ctrl+C para salir)
