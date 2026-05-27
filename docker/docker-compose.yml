@@ -3,6 +3,10 @@ name: custodiam
 
 services:
   # ============ BASE DE DATOS ============
+  # Una instancia PostgreSQL con 2 bases de datos:
+  #   - custodiam    → API (FastAPI + Alembic)
+  #   - custodiam_kc → Keycloak (tablas internas)
+  # Separadas para que Alembic no detecte las tablas de Keycloak.
   postgres:
     image: postgres:15-alpine
     container_name: custodiam-db
@@ -10,8 +14,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-custodiam}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-custodiam}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-custodiam_kc}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-custodiam}"]
       interval: 10s
@@ -22,7 +28,7 @@ services:
       - custodiam-net
 
   # ============ AUTENTICACIÓN ============
-  # Keycloak comparte BD con la app (misma BD, tablas separadas sin colisión)
+  # Keycloak usa su propia BD (custodiam_kc) dentro del mismo PostgreSQL
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     container_name: custodiam-auth
@@ -30,7 +36,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-custodiam}
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB:-custodiam_kc}
       KC_DB_USERNAME: ${POSTGRES_USER:-custodiam}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KC_PROXY_HEADERS: xforwarded
@@ -38,7 +44,13 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-    command: start
+      # SMTP credentials (Brevo) consumed by realm-custodiam.json via ${env.VAR} placeholders.
+      # See ADR-021 and EN-08-30. Values live encrypted in docker/.env.sops.
+      KEYCLOAK_SMTP_USERNAME: ${KEYCLOAK_SMTP_USERNAME}
+      KEYCLOAK_SMTP_PASSWORD: ${KEYCLOAK_SMTP_PASSWORD}
+    volumes:
+      - ../keycloak/realm-custodiam.json:/opt/keycloak/data/import/realm-custodiam.json:ro
+    command: start --import-realm
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,7 +69,7 @@ services:
     image: ghcr.io/custodiam/custodiam-api:${API_VERSION:-latest}
     container_name: custodiam-api
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-custodiam}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-custodiam}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-custodiam}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-custodiam}
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: https://auth.${DOMAIN:-localhost}
       KEYCLOAK_REALM: custodiam
@@ -94,7 +106,10 @@ services:
 
   # ============ NOTIFICACIONES ============
   ntfy:
-    image: binwiederhier/ntfy:latest
+    # Pinned to v2.23.0 (release 2026-05-17). Promote to a newer SemVer
+    # tag deliberately when reviewing changelog at
+    # https://github.com/binwiederhier/ntfy/releases.
+    image: binwiederhier/ntfy:v2.23.0
     container_name: custodiam-ntfy
     command: serve
     environment:
@@ -113,7 +128,11 @@ services:
 
   # ============ AUTOMATIZACIONES (POST-MVP) ============
   n8n:
-    image: n8nio/n8n:latest
+    # Pinned to 2.21.7 (the version published as `latest` on Docker Hub
+    # at audit time, verified via `docker inspect`). Promote to a newer
+    # SemVer tag deliberately when reviewing changelog at
+    # https://docs.n8n.io/release-notes/.
+    image: n8nio/n8n:2.21.7
     container_name: custodiam-n8n
     environment:
       N8N_HOST: n8n.${DOMAIN:-localhost}
@@ -135,9 +154,41 @@ services:
     profiles:
       - full  # Solo se levanta con: docker compose --profile full up
 
+  # ============ MOCK OIDC (TESTING) ============
+  # Servidor OIDC ligero para tests sin UI del cliente OIDC en
+  # custodiam-app (ver guía 22 §5). NO arranca por defecto:
+  #   docker compose --profile test up -d mock-oidc
+  # Una vez levantado:
+  #   curl http://localhost:8888/default/.well-known/openid-configuration
+  # Para correr los tests Dart que lo consumen desde custodiam-app:
+  #   MOCK_OIDC_URL=http://localhost:8888 flutter test test/infrastructure/auth/
+  mock-oidc:
+    image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+    container_name: custodiam-mock-oidc
+    ports:
+      - "8888:8080"
+    environment:
+      LOG_LEVEL: info
+      SERVER_PORT: "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/default/.well-known/openid-configuration || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - custodiam-net
+    profiles:
+      - test  # Solo se levanta con --profile test
+
   # ============ TÚNEL CLOUDFLARE ============
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # Pinned to 2026.5.1 (release 2026-05-25, build verified via
+    # docker inspect CI_BUILD_DATE label). Cloudflare publishes
+    # calendar-versioned releases at
+    # https://github.com/cloudflare/cloudflared/releases — promote
+    # deliberately, never let `:latest` drift through prod.
+    image: cloudflare/cloudflared:2026.5.1
     container_name: custodiam-tunnel
     command: tunnel run
     environment:

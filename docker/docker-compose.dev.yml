@@ -8,9 +8,22 @@ services:
       - "5432:5432"
 
   keycloak:
-    command: start-dev
+    command: start-dev --import-realm
     ports:
       - "8080:8080"
+    environment:
+      # In dev without the Cloudflare Tunnel, Keycloak is reached from
+      # the device/host as http://localhost:8080 (via adb reverse for
+      # Android USB devices). Overriding KC_HOSTNAME here makes
+      # Keycloak generate every absolute URL (form actions, redirects,
+      # cookies, etc.) against localhost so the browser does not get
+      # bounced to auth.custodiam.es:8080 and lose its session cookie.
+      #
+      # When running with the tunnel (--profile tunnel + base compose
+      # without this override), the base value auth.${DOMAIN} stays in
+      # effect and Keycloak emits URLs that match the public hostname
+      # served by Cloudflare. See guía 10 §2.6.
+      KC_HOSTNAME: "http://localhost:8080"
 
   ntfy:
     ports:

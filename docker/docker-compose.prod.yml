@@ -1,5 +1,9 @@
 # docker/docker-compose.prod.yml
 # Uso: docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile tunnel up -d
+#
+# Override del modo prod sobre el base. Endurece Keycloak y la API.
+# cloudflared NO se redefine aquí: vive en el base con `profiles: [tunnel]`
+# y se levanta vía `--profile tunnel`, igual que en modo tunnel staging.
 
 services:
   keycloak:
@@ -9,7 +13,3 @@ services:
   api:
     environment:
       DEBUG: "false"
-
-  # Activar túnel Cloudflare
-  cloudflared:
-    profiles: []  # Eliminar profile para que siempre se levante
