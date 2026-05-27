@@ -2,7 +2,7 @@
 #
 # Seed test users for QA across the whole UI flow.
 #
-# Creates 5 accounts in the Keycloak realm 'custodiam' and the matching
+# Creates 7 accounts in the Keycloak realm 'custodiam' and the matching
 # rows in the API database (voluntarios + voluntario_roles), so that
 # every screen of the app can be exercised against real data without
 # manual onboarding. Idempotent: re-running it does not duplicate
@@ -11,32 +11,37 @@
 # Users created
 # -------------
 #
-# | username    | password    | rol KC             | BD row | Asignación BD     | Used to exercise                                            |
-# |-------------|-------------|--------------------|--------|-------------------|-------------------------------------------------------------|
-# | vol1        | vol1        | voluntario         |   yes  | voluntario        | mi-perfil, /voluntarios (lista), "Sin acceso" en alta/ficha |
-# | jefe1       | jefe1       | jefe_equipo        |   yes  | jefe_equipo       | ficha admin read-only, banner comando operativo             |
-# | coord1      | coord1      | coordinador        |   yes  | coordinador       | admin operativo completo (alta, ficha edit, cambio rol)     |
-# | tesor1      | tesor1      | tesorero           |   yes  | tesorero          | caso edge: lista + ficha sí, editar/crear no                |
-# | admin       | admin       | admin              |   yes  | admin             | flujos del admin técnico (permisos sistema.*)               |
-# | reviewstore | reviewstore | coordinador+admin  |   yes  | coordinador       | cuenta de revisión de stores: cobertura total (operativa+sistema) |
-# | superadmin  | superadmin  | coordinador+admin  |   yes  | coordinador       | cuenta de emergencia del equipo: cobertura total            |
+# | username                  | password                  | rol KC             | BD row | Asignación BD     | Used to exercise                                            |
+# |---------------------------|---------------------------|--------------------|--------|-------------------|-------------------------------------------------------------|
+# | Voluntario1@test.com      | Voluntario1@test.com      | voluntario         |   yes  | voluntario        | mi-perfil, /voluntarios (lista), "Sin acceso" en alta/ficha |
+# | Jefeequipo1@test.com      | Jefeequipo1@test.com      | jefe_equipo        |   yes  | jefe_equipo       | ficha admin read-only, banner comando operativo             |
+# | Coordinador1@test.com     | Coordinador1@test.com     | coordinador        |   yes  | coordinador       | admin operativo completo (alta, ficha edit, cambio rol)     |
+# | Tesorero1@test.com        | Tesorero1@test.com        | tesorero           |   yes  | tesorero          | caso edge: lista + ficha sí, editar/crear no                |
+# | Admin1@test.com           | Admin1@test.com           | admin              |   yes  | admin             | flujos del admin técnico (permisos sistema.*)               |
+# | Reviewstore1@test.com     | Reviewstore1@test.com     | coordinador+admin  |   yes  | coordinador       | cuenta de revisión de stores: cobertura total (operativa+sistema) |
+# | Superadmin1@test.com      | Superadmin1@test.com      | coordinador+admin  |   yes  | coordinador       | cuenta de emergencia del equipo: cobertura total            |
 #
-# Doctrina del seed: las siete cuentas siguen el patrón password =
-# username. Es deliberadamente débil porque el repo es público y las
-# credenciales aparecen en el book público (docs.custodiam.es) y, en
-# el caso de reviewstore, en la submission de Google Play y Apple
-# App Store. Esto NO es una postura sobre seguridad de producción
-# real: estas cuentas son SACRIFICABLES y solo se usan para QA del
-# equipo, defensa académica y review de stores. Cuando una
+# Doctrina del seed: las siete cuentas siguen el patrón triple-igual
+# username = password = email = '<Rol>1@test.com', capitalizado y sin
+# abreviaturas. Es deliberadamente débil porque el repo es público y
+# las credenciales aparecen en el book público (docs.custodiam.es) y,
+# en el caso de reviewstore, en la submission de Google Play y Apple
+# App Store. Estas cuentas son SACRIFICABLES y solo se usan para QA
+# del equipo, defensa académica y review de stores. Cuando una
 # agrupación adopte Custodiam para uso productivo real, las cuentas
 # humanas se crean por el flujo normal de alta de voluntario y este
 # seed deja de ejecutarse.
 #
-# Las dos cuentas con admin + coordinador (reviewstore y superadmin)
-# están separadas por audiencia, no por capacidad: reviewstore es
-# visible a Google Play / Apple, superadmin es para administración
-# interna del piloto. Permite rotar credenciales o eliminar una sin
-# afectar a la otra.
+# El patrón concreto ('<Rol>1@test.com') cumple la passwordPolicy del
+# realm 'length(8) and upperCase(1) and digits(1)' sin necesidad de
+# relajarla: la mayúscula inicial cubre upperCase(1), el dígito '1'
+# cubre digits(1) y la longitud del string sobra para length(8).
+#
+# Las dos cuentas con admin + coordinador (Reviewstore1@test.com y
+# Superadmin1@test.com) están separadas por audiencia, no por
+# capacidad: la primera es visible a Google Play / Apple, la segunda
+# es para administración interna del piloto. Permite rotar credenciales
+# o eliminar una sin afectar a la otra.
 #
 # Why ASCII-only names: bash on Git Bash for Windows routes subprocess
 # arguments through cp1252 before CreateProcessW, which mojibakes any
@@ -242,13 +247,16 @@ upsert_db_voluntario() {
     exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 <<-EOSQL
     -- Voluntario row: insert only if no row exists for this keycloak_id.
     -- Using gen_random_uuid() (PostgreSQL native) for the primary key.
+    -- estado: the enum 'estado_voluntario' uses Python enum NAMES
+    -- (UPPERCASE) per SQLAlchemy's default behavior, see Alembic
+    -- migration 0f59798cd66b_crear_modelos_voluntarios.py.
     INSERT INTO voluntarios (
       id, keycloak_id, nombre, telefono, municipio, fecha_nacimiento,
       email, estado, fecha_alta, conductor_habilitado
     )
     SELECT
       gen_random_uuid(), '$kc_id', '$nombre', '$telefono', '$municipio',
-      DATE '$fecha_nac', '$email', 'activo', CURRENT_DATE, FALSE
+      DATE '$fecha_nac', '$email', 'ACTIVO', CURRENT_DATE, FALSE
     WHERE NOT EXISTS (
       SELECT 1 FROM voluntarios WHERE keycloak_id = '$kc_id'
     );
@@ -277,42 +285,42 @@ EOSQL
 
 # ── Seed users ────────────────────────────────────────────────────────
 
-# vol1 — voluntario operativo. Tiene fila BD + asignación rol.
-KC_VOL1=$(upsert_kc_user "vol1" "vol1" "Pedro" "Sanchez" \
-  "vol1@custodiam.test" "voluntario")
+# Voluntario1@test.com — voluntario operativo. Tiene fila BD + asignación rol.
+KC_VOL1=$(upsert_kc_user "Voluntario1@test.com" "Voluntario1@test.com" "Pedro" "Sanchez" \
+  "Voluntario1@test.com" "voluntario")
 upsert_db_voluntario "$KC_VOL1" "Pedro Sanchez" "600100001" "Zuera" \
-  "1990-03-15" "vol1@custodiam.test" "voluntario"
+  "1990-03-15" "Voluntario1@test.com" "voluntario"
 
-# jefe1 — jefe de equipo. Activa ficha admin read-only + comando.
-KC_JEFE1=$(upsert_kc_user "jefe1" "jefe1" "Lucia" "Martinez" \
-  "jefe1@custodiam.test" "jefe_equipo")
+# Jefeequipo1@test.com — jefe de equipo. Activa ficha admin read-only + comando.
+KC_JEFE1=$(upsert_kc_user "Jefeequipo1@test.com" "Jefeequipo1@test.com" "Lucia" "Martinez" \
+  "Jefeequipo1@test.com" "jefe_equipo")
 upsert_db_voluntario "$KC_JEFE1" "Lucia Martinez" "600100002" \
-  "Villanueva de Gallego" "1985-07-22" "jefe1@custodiam.test" "jefe_equipo"
+  "Villanueva de Gallego" "1985-07-22" "Jefeequipo1@test.com" "jefe_equipo"
 
-# coord1 — coordinador. Admin operativo completo.
-KC_COORD1=$(upsert_kc_user "coord1" "coord1" "Carlos" "Lopez" \
-  "coord1@custodiam.test" "coordinador")
+# Coordinador1@test.com — coordinador. Admin operativo completo.
+KC_COORD1=$(upsert_kc_user "Coordinador1@test.com" "Coordinador1@test.com" "Carlos" "Lopez" \
+  "Coordinador1@test.com" "coordinador")
 upsert_db_voluntario "$KC_COORD1" "Carlos Lopez" "600100003" \
-  "San Mateo de Gallego" "1980-11-08" "coord1@custodiam.test" "coordinador"
+  "San Mateo de Gallego" "1980-11-08" "Coordinador1@test.com" "coordinador"
 
-# tesor1 — tesorero. Caso edge: lectura sí, edición/creación no.
-KC_TESOR1=$(upsert_kc_user "tesor1" "tesor1" "Marta" "Ruiz" \
-  "tesor1@custodiam.test" "tesorero")
+# Tesorero1@test.com — tesorero. Caso edge: lectura sí, edición/creación no.
+KC_TESOR1=$(upsert_kc_user "Tesorero1@test.com" "Tesorero1@test.com" "Marta" "Ruiz" \
+  "Tesorero1@test.com" "tesorero")
 upsert_db_voluntario "$KC_TESOR1" "Marta Ruiz" "600100004" "Zuera" \
-  "1988-02-19" "tesor1@custodiam.test" "tesorero"
+  "1988-02-19" "Tesorero1@test.com" "tesorero"
 
-# admin — admin técnico puro del catálogo de roles. Tiene fila en BD
+# Admin1@test.com — admin técnico puro del catálogo de roles. Tiene fila en BD
 # con asignación del rol admin para que /mi-perfil renderice su perfil
 # y la sección de roles muestre 'admin' explícitamente. El flujo edge
 # 'usuario Keycloak sin fila BD vinculada' sigue cubierto por código
 # (AppEmptyState) y por tests E2E del mock OIDC server; no necesita un
 # usuario seed específico para reproducirlo.
-KC_ADMIN=$(upsert_kc_user "admin" "admin" "Admin" "Tecnico" \
-  "admin@custodiam.test" "admin")
+KC_ADMIN=$(upsert_kc_user "Admin1@test.com" "Admin1@test.com" "Admin" "Tecnico" \
+  "Admin1@test.com" "admin")
 upsert_db_voluntario "$KC_ADMIN" "Admin Tecnico" "600100005" "Zaragoza" \
-  "1980-01-01" "admin@custodiam.test" "admin"
+  "1980-01-01" "Admin1@test.com" "admin"
 
-# reviewstore — cuenta pública para la revisión de Google Play y App
+# Reviewstore1@test.com — cuenta pública para la revisión de Google Play y App
 # Store. Doble rol en Keycloak (coordinador + admin) para cobertura
 # total: el coordinador habilita todo el dominio operativo (servicios,
 # voluntarios, inventario, fichaje, notificaciones) y admin añade los
@@ -322,30 +330,30 @@ upsert_db_voluntario "$KC_ADMIN" "Admin Tecnico" "600100005" "Zaragoza" \
 # coord+admin, coord es el rol operativo "visible" en la ficha.
 # Password = username porque la credencial aparece en la submission
 # pública de las stores.
-KC_REVIEW=$(upsert_kc_user "reviewstore" "reviewstore" "Review" "Stores" \
-  "reviewstore@custodiam.test" "coordinador" "admin")
+KC_REVIEW=$(upsert_kc_user "Reviewstore1@test.com" "Reviewstore1@test.com" "Review" "Stores" \
+  "Reviewstore1@test.com" "coordinador" "admin")
 upsert_db_voluntario "$KC_REVIEW" "Review Stores" "600100099" "Zaragoza" \
-  "1990-01-01" "reviewstore@custodiam.test" "coordinador"
+  "1990-01-01" "Reviewstore1@test.com" "coordinador"
 
-# superadmin — cuenta de emergencia del equipo. Misma cobertura que
-# reviewstore (coordinador + admin) pero con audiencia distinta:
-# administración interna del piloto, no revisión externa. Permite
-# rotar credenciales o eliminar reviewstore sin perder acceso de
-# emergencia, y viceversa.
-KC_SUPER=$(upsert_kc_user "superadmin" "superadmin" "Super" "Admin" \
-  "superadmin@custodiam.test" "coordinador" "admin")
+# Superadmin1@test.com — cuenta de emergencia del equipo. Misma cobertura
+# que Reviewstore1@test.com (coordinador + admin) pero con audiencia
+# distinta: administración interna del piloto, no revisión externa.
+# Permite rotar credenciales o eliminar Reviewstore1@test.com sin
+# perder acceso de emergencia, y viceversa.
+KC_SUPER=$(upsert_kc_user "Superadmin1@test.com" "Superadmin1@test.com" "Super" "Admin" \
+  "Superadmin1@test.com" "coordinador" "admin")
 upsert_db_voluntario "$KC_SUPER" "Super Admin" "600100098" "Zaragoza" \
-  "1985-01-01" "superadmin@custodiam.test" "coordinador"
+  "1985-01-01" "Superadmin1@test.com" "coordinador"
 
 echo
 echo "==> Done. 7 test users seeded."
 echo
-echo "    vol1        / vol1        (voluntario)"
-echo "    jefe1       / jefe1       (jefe_equipo)"
-echo "    coord1      / coord1      (coordinador)"
-echo "    tesor1      / tesor1      (tesorero)"
-echo "    admin       / admin       (admin tecnico, con row en BD)"
-echo "    reviewstore / reviewstore (coordinador + admin, cuenta de stores)"
-echo "    superadmin  / superadmin  (coordinador + admin, cuenta de emergencia del equipo)"
+echo "    Voluntario1@test.com   / Voluntario1@test.com   (voluntario)"
+echo "    Jefeequipo1@test.com   / Jefeequipo1@test.com   (jefe_equipo)"
+echo "    Coordinador1@test.com  / Coordinador1@test.com  (coordinador)"
+echo "    Tesorero1@test.com     / Tesorero1@test.com     (tesorero)"
+echo "    Admin1@test.com        / Admin1@test.com        (admin tecnico, con row en BD)"
+echo "    Reviewstore1@test.com  / Reviewstore1@test.com  (coordinador + admin, cuenta de stores)"
+echo "    Superadmin1@test.com   / Superadmin1@test.com   (coordinador + admin, cuenta de emergencia del equipo)"
 echo
 echo "    Login en app.custodiam.es o http://localhost (segun entorno)."
