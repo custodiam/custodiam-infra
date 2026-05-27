@@ -11,19 +11,31 @@
 # Users created
 # -------------
 #
-# | username | password    | rol KC             | BD row | Used to exercise                                            |
-# |----------|-------------|--------------------|--------|-------------------------------------------------------------|
-# | vol1     | Vol1Pass!   | voluntario         |   yes  | mi-perfil, /voluntarios (lista), "Sin acceso" en alta/ficha |
-# | jefe1    | Jefe1Pass!  | jefe_equipo        |   yes  | ficha admin read-only, banner comando operativo             |
-# | coord1   | Coord1Pass! | coordinador        |   yes  | admin operativo completo (alta, ficha edit, cambio rol)     |
-# | tesor1   | Tesor1Pass! | tesorero           |   yes  | caso edge: lista + ficha sí, editar/crear no                |
-# | admin1   | Admin1Pass! | admin              |    no  | admin técnico puro: /mi-perfil debe mostrar "Sin acceso"    |
+# | username    | password    | rol KC             | BD row | Used to exercise                                            |
+# |-------------|-------------|--------------------|--------|-------------------------------------------------------------|
+# | vol1        | Vol1Pass!   | voluntario         |   yes  | mi-perfil, /voluntarios (lista), "Sin acceso" en alta/ficha |
+# | jefe1       | Jefe1Pass!  | jefe_equipo        |   yes  | ficha admin read-only, banner comando operativo             |
+# | coord1      | Coord1Pass! | coordinador        |   yes  | admin operativo completo (alta, ficha edit, cambio rol)     |
+# | tesor1      | Tesor1Pass! | tesorero           |   yes  | caso edge: lista + ficha sí, editar/crear no                |
+# | admin1      | Admin1Pass! | admin              |    no  | admin técnico puro: /mi-perfil debe mostrar "Sin acceso"    |
+# | reviewstore | reviewstore | coordinador+admin  |   yes  | cuenta de revisión de stores: cobertura total (operativa+sistema) |
 #
 # admin1 intentionally has no BD row: that is exactly the scenario we
 # want to verify ("usuario Keycloak sin fila vinculada" → 404 →
 # AppEmptyState 'Sin perfil'). Every other user has both the KC
 # account and the BD row plus an active assignment in
 # voluntario_roles, so the admin ficha shows their role.
+#
+# reviewstore has two realm roles in Keycloak (coordinador AND admin)
+# so the JWT carries both, granting the union of permissions
+# (everything operational + the sistema.* tools). In BD only the
+# coordinador assignment is materialised: admin is a technical role
+# that does not correspond to an operational role inside an
+# agrupación. Password kept equal to the username deliberately
+# because it must appear in the public store submission ("Sign-in
+# info" of App Store Connect / "Acceso a la aplicación" en Google
+# Play). For users that are not reviewstore, passwords are stronger
+# and intended for QA inside the team.
 #
 # Why ASCII-only names: bash on Git Bash for Windows routes subprocess
 # arguments through cp1252 before CreateProcessW, which mojibakes any
@@ -70,11 +82,22 @@ REALM="custodiam"
 PG_USER="${POSTGRES_USER:-custodiam}"
 PG_DB="${POSTGRES_DB:-custodiam}"
 
+# Compose override applied on top of docker-compose.yml when running
+# `docker compose exec postgres`. Defaults to the dev override (local
+# stack with exposed ports) but can be set to the prod override when
+# seeding against the productive stack from the host server:
+#
+#   COMPOSE_OVERRIDE=docker/docker-compose.prod.yml \
+#   KC_BASE=https://auth.custodiam.es \
+#   KEYCLOAK_PASSWORD=<el real> \
+#     ./scripts/seed-test-users.sh
+COMPOSE_OVERRIDE="${COMPOSE_OVERRIDE:-docker/docker-compose.dev.yml}"
+
 # ── Pre-flight: roles catalog must be seeded ──────────────────────────
 
 echo "==> Checking that the 'roles' catalog has been seeded"
 ROLES_COUNT=$(
-  docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+  docker compose -f docker/docker-compose.yml -f "$COMPOSE_OVERRIDE" \
     exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -tA -c "SELECT COUNT(*) FROM roles;" \
     2>/dev/null | tr -d '[:space:]' || echo "0"
 )
@@ -195,7 +218,7 @@ upsert_db_voluntario() {
 
   echo "==> Ensuring BD row for kc_id $kc_id (rol $rol_nombre)"
 
-  docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+  docker compose -f docker/docker-compose.yml -f "$COMPOSE_OVERRIDE" \
     exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 <<-EOSQL
     -- Voluntario row: insert only if no row exists for this keycloak_id.
     -- Using gen_random_uuid() (PostgreSQL native) for the primary key.
@@ -264,13 +287,29 @@ upsert_db_voluntario "$KC_TESOR1" "Marta Ruiz" "600100004" "Zuera" \
 upsert_kc_user "admin1" "Admin1Pass!" "Admin" "Tecnico" \
   "admin1@custodiam.test" "admin" > /dev/null
 
+# reviewstore — cuenta pública para la revisión de Google Play y App
+# Store. Doble rol en Keycloak (coordinador + admin) para cobertura
+# total: el coordinador habilita todo el dominio operativo (servicios,
+# voluntarios, inventario, fichaje, notificaciones) y admin añade los
+# permisos sistema.*. Fila en BD con asignación de coordinador para
+# que /mi-perfil renderice un perfil válido; el admin no se
+# materialisa en voluntario_roles porque es un rol técnico, no un
+# rol operativo dentro de una agrupación. Password = username
+# deliberadamente porque la credencial aparece en la submission
+# pública de las stores.
+KC_REVIEW=$(upsert_kc_user "reviewstore" "reviewstore" "Review" "Stores" \
+  "reviewstore@custodiam.test" "coordinador" "admin")
+upsert_db_voluntario "$KC_REVIEW" "Review Stores" "600100099" "Zaragoza" \
+  "1990-01-01" "reviewstore@custodiam.test" "coordinador"
+
 echo
-echo "==> Done. 5 test users seeded."
+echo "==> Done. 6 test users seeded."
 echo
-echo "    vol1     / Vol1Pass!     (voluntario)"
-echo "    jefe1    / Jefe1Pass!    (jefe_equipo)"
-echo "    coord1   / Coord1Pass!   (coordinador)"
-echo "    tesor1   / Tesor1Pass!   (tesorero)"
-echo "    admin1   / Admin1Pass!   (admin, sin row en BD)"
+echo "    vol1        / Vol1Pass!     (voluntario)"
+echo "    jefe1       / Jefe1Pass!    (jefe_equipo)"
+echo "    coord1      / Coord1Pass!   (coordinador)"
+echo "    tesor1      / Tesor1Pass!   (tesorero)"
+echo "    admin1      / Admin1Pass!   (admin, sin row en BD)"
+echo "    reviewstore / reviewstore   (coordinador + admin, cuenta de stores)"
 echo
 echo "    Login en app.custodiam.es o http://localhost (según entorno)."
