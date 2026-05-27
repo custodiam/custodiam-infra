@@ -51,7 +51,11 @@
 #   2. The API has applied migrations:  cd ../custodiam-api && uv run alembic upgrade head
 #      (the script checks the 'roles' catalog and aborts with a clear
 #      error if the canonical 12 roles are not present)
-#   3. KEYCLOAK_PASSWORD is available either as env var or in docker/.env
+#   3. KEYCLOAK_PASSWORD is available via either:
+#      - docker/.env.sops      decrypted on the fly with sops+age (preferred,
+#                              same flow as dev-up.sh / prod-up.sh)
+#      - docker/.env           plain dotenv file (fallback for bootstrap)
+#      - the calling shell     (env var inline before the script)
 #
 # Usage:  ./scripts/seed-test-users.sh
 
@@ -60,17 +64,32 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# ── Load KEYCLOAK_PASSWORD ────────────────────────────────────────────
+# ── Resolve env file (sops+age aware) ─────────────────────────────────
+#
+# Same pattern used by dev-up.sh, tunnel-up.sh and prod-up.sh: descifra
+# docker/.env.sops con sops+age si está presente, o usa docker/.env como
+# fallback. Tras `resolve_env_file`, $ENV_FILE apunta al archivo correcto
+# (o tempfile descifrado con `chmod 600`). El trap de limpieza borra
+# cualquier tempfile que `_lib-env.sh` haya creado en CLEANUP_FILES.
+#
+# Acto seguido se hace `source` del archivo resuelto para exportar
+# KEYCLOAK_PASSWORD (y el resto de variables) al entorno del script.
+# Sin esto, el `curl` contra la Admin API de Keycloak no podría
+# autenticarse.
 
-if [[ -z "${KEYCLOAK_PASSWORD:-}" ]] && [[ -f docker/.env ]]; then
-  # shellcheck disable=SC1091
-  set -a
-  source docker/.env
-  set +a
-fi
+CLEANUP_FILES=()
+trap '[[ ${#CLEANUP_FILES[@]} -gt 0 ]] && rm -f "${CLEANUP_FILES[@]}"' EXIT INT TERM
+# shellcheck source=./_lib-env.sh
+source "$(dirname "$0")/_lib-env.sh"
+resolve_env_file
+# shellcheck disable=SC1090
+set -a
+source "$ENV_FILE"
+set +a
 
 if [[ -z "${KEYCLOAK_PASSWORD:-}" ]]; then
-  echo "ERROR: KEYCLOAK_PASSWORD is not set and docker/.env does not provide it." >&2
+  echo "ERROR: KEYCLOAK_PASSWORD no aparece en el archivo de entorno." >&2
+  echo "       Revisa docker/.env.sops (cifrado) o docker/.env (plano)." >&2
   exit 1
 fi
 
