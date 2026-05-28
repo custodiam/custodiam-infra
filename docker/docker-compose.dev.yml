@@ -41,6 +41,16 @@ services:
       - ../../custodiam-api/app:/app/app:ro  # Hot reload (solo lectura)
     environment:
       DEBUG: "true"
+      # En dev local el Pixel/emulador habla a Keycloak vía adb reverse
+      # a localhost:8080, y Keycloak emite tokens con
+      # iss=http://localhost:8080/realms/custodiam (ver override
+      # KC_HOSTNAME del servicio keycloak más arriba). El backend valida
+      # `iss` contra keycloak_public_url; sin este override hereda
+      # `https://auth.${DOMAIN}` del compose base — `auth.custodiam.es`
+      # con el .env.sops del equipo — y rechaza con 401 cualquier
+      # llamada autenticada en dev. Override simétrico al de Keycloak
+      # para mantener el contrato issuer ↔ validator coherente.
+      KEYCLOAK_PUBLIC_URL: "http://localhost:8080"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # Web: build local en vez de imagen GHCR

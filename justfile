@@ -37,6 +37,18 @@ prod:
 down:
     ./scripts/down.sh
 
+# Forzar build sin cache de un servicio y recrear su contenedor. Útil
+# cuando se sospecha que la layer cache de Docker se ha quedado podrida
+# (síntoma típico: el contenedor arranca pero falla con ModuleNotFoundError
+# o equivalente tras haber actualizado pyproject.toml / Dockerfile). El
+# parámetro `service` por defecto es `api`; usa `just rebuild web` para
+# el frontend.
+rebuild service="api":
+    docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+      build --no-cache {{service}}
+    docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+      --profile dev up -d --force-recreate --no-deps {{service}}
+
 # Sembrar las 7 cuentas de test (vol1, jefe1, coord1, tesor1, admin, reviewstore, superadmin) en el realm de DESARROLLO
 seed:
     ./scripts/seed-test-users.sh
