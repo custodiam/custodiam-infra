@@ -2,7 +2,7 @@
 #
 # Seed test users for QA across the whole UI flow.
 #
-# Creates 7 accounts in the Keycloak realm 'custodiam' and the matching
+# Creates 8 accounts in the Keycloak realm 'custodiam' and the matching
 # rows in the API database (voluntarios + voluntario_roles), so that
 # every screen of the app can be exercised against real data without
 # manual onboarding. Idempotent: re-running it does not duplicate
@@ -17,11 +17,12 @@
 # | Jefeequipo1@test.com      | Jefeequipo1@test.com      | jefe_equipo        |   yes  | jefe_equipo       | ficha admin read-only, banner comando operativo             |
 # | Coordinador1@test.com     | Coordinador1@test.com     | coordinador        |   yes  | coordinador       | admin operativo completo (alta, ficha edit, cambio rol)     |
 # | Tesorero1@test.com        | Tesorero1@test.com        | tesorero           |   yes  | tesorero          | caso edge: lista + ficha sí, editar/crear no                |
+# | Secretario1@test.com      | Secretario1@test.com      | secretario         |   yes  | secretario        | gestión voluntarios + sistema parcial (subconjunto admin)   |
 # | Admin1@test.com           | Admin1@test.com           | admin              |   yes  | admin             | flujos del admin técnico (permisos sistema.*)               |
 # | Reviewstore1@test.com     | Reviewstore1@test.com     | coordinador+admin  |   yes  | coordinador       | cuenta de revisión de stores: cobertura total (operativa+sistema) |
 # | Superadmin1@test.com      | Superadmin1@test.com      | coordinador+admin  |   yes  | coordinador       | cuenta de emergencia del equipo: cobertura total            |
 #
-# Doctrina del seed: las siete cuentas siguen el patrón triple-igual
+# Doctrina del seed: las ocho cuentas siguen el patrón triple-igual
 # username = password = email = '<Rol>1@test.com', capitalizado y sin
 # abreviaturas. Es deliberadamente débil porque el repo es público y
 # las credenciales aparecen en el book público (docs.custodiam.es) y,
@@ -309,6 +310,16 @@ KC_TESOR1=$(upsert_kc_user "Tesorero1@test.com" "Tesorero1@test.com" "Marta" "Ru
 upsert_db_voluntario "$KC_TESOR1" "Marta Ruiz" "600100004" "Zuera" \
   "1988-02-19" "Tesorero1@test.com" "tesorero"
 
+# Secretario1@test.com — secretario administrativo. Subconjunto del coordinador
+# centrado en la gestión de voluntarios (alta, edición, baja, cambio de rol)
+# más algunas tareas de sistema (no todas). Permite validar el perfil
+# "administrativo no operativo": sí toca voluntarios, no convoca servicios
+# de emergencia.
+KC_SECRE1=$(upsert_kc_user "Secretario1@test.com" "Secretario1@test.com" "Sara" "Gomez" \
+  "Secretario1@test.com" "secretario")
+upsert_db_voluntario "$KC_SECRE1" "Sara Gomez" "600100006" \
+  "Villanueva de Gallego" "1987-09-04" "Secretario1@test.com" "secretario"
+
 # Admin1@test.com — admin técnico puro del catálogo de roles. Tiene fila en BD
 # con asignación del rol admin para que /mi-perfil renderice su perfil
 # y la sección de roles muestre 'admin' explícitamente. El flujo edge
@@ -346,12 +357,13 @@ upsert_db_voluntario "$KC_SUPER" "Super Admin" "600100098" "Zaragoza" \
   "1985-01-01" "Superadmin1@test.com" "coordinador"
 
 echo
-echo "==> Done. 7 test users seeded."
+echo "==> Done. 8 test users seeded."
 echo
 echo "    Voluntario1@test.com   / Voluntario1@test.com   (voluntario)"
 echo "    Jefeequipo1@test.com   / Jefeequipo1@test.com   (jefe_equipo)"
 echo "    Coordinador1@test.com  / Coordinador1@test.com  (coordinador)"
 echo "    Tesorero1@test.com     / Tesorero1@test.com     (tesorero)"
+echo "    Secretario1@test.com   / Secretario1@test.com   (secretario)"
 echo "    Admin1@test.com        / Admin1@test.com        (admin tecnico, con row en BD)"
 echo "    Reviewstore1@test.com  / Reviewstore1@test.com  (coordinador + admin, cuenta de stores)"
 echo "    Superadmin1@test.com   / Superadmin1@test.com   (coordinador + admin, cuenta de emergencia del equipo)"
