@@ -1,0 +1,40 @@
+# docker/docker-compose.test.yml
+#
+# Flavor de TEST (profile `test`). Instancia PostgreSQL efímera y aislada
+# para la suite de pytest de la API y para los E2E (Patrol), de modo que
+# NINGÚN test escriba en la BD de desarrollo (`custodiam-db`). Sustituye al
+# antiguo `docker run` ad-hoc del 5433 que el conftest levantaba a mano.
+#
+# Uso (desde custodiam-infra/, o vía `just test-up`):
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.test.yml \
+#     --profile test up -d --wait db-test
+#
+# Efímera: los datos viven en tmpfs (RAM) y se pierden al parar el
+# contenedor. Aun así, la suite resetea el schema en cada arranque de sesión
+# (DROP SCHEMA + `alembic upgrade head`) para reproducibilidad — no depender
+# del ciclo de vida del contenedor para garantizar estado limpio.
+#
+# Versión alineada con producción (15-alpine), no la 16 que usaba el ad-hoc.
+name: custodiam
+
+services:
+  db-test:
+    image: postgres:15-alpine
+    container_name: custodiam-db-test
+    environment:
+      POSTGRES_USER: custodiam
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: custodiam_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U custodiam -d custodiam_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - custodiam-net
+    profiles:
+      - test
