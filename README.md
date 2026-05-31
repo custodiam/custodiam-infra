@@ -78,6 +78,7 @@ Wrappers finos sobre `docker compose` que encapsulan los flags y profiles correc
 | n8n | 5678 | http://localhost:5678 | `full` |
 | Cloudflare Tunnel | — | — | `tunnel` |
 | Mock OIDC server | 8888 | http://localhost:8888 | `test` |
+| PostgreSQL de test (`db-test`) | 5433 | localhost:5433 | `test` |
 
 ### Mock OIDC server (testing del cliente OIDC)
 
@@ -93,6 +94,28 @@ curl http://localhost:8888/default/.well-known/openid-configuration
 # Bajarlo
 docker compose --profile test down
 ```
+
+### PostgreSQL de test (`db-test`, profile `test`)
+
+Instancia PostgreSQL **efímera y aislada** (`postgres:15-alpine`, contenedor `custodiam-db-test`, puerto `5433`, datos en **tmpfs**/RAM) que consume la suite de **pytest de `custodiam-api`** y los **E2E**. Está deliberadamente **separada de la BD de desarrollo `custodiam-db`** (puerto 5432) para que ningún test escriba sobre datos de dev. Sustituye al antiguo `docker run` ad-hoc del 5433 que el conftest levantaba a mano. No arranca por defecto (profile `test`).
+
+Recetas `just` para gestionarla (envuelven `docker compose -f docker-compose.yml -f docker-compose.test.yml --profile test`):
+
+```bash
+# Levantar el db-test y esperar a que esté healthy (--wait) antes de devolver.
+# Es lo que necesita la suite de pytest para conectarse.
+just test-up
+
+# Recrear el db-test desde cero (--force-recreate): contenedor vacío y estado
+# limpio. Para los E2E, que requieren partir de una BD sin datos entre corridas.
+just test-reset
+
+# Parar y borrar SOLO el db-test (rm -sf). Nunca usa `down`, que bajaría todo
+# el stack del proyecto (ver gotcha sobre `--profile down`).
+just test-down
+```
+
+> El `db-test` es efímero: al pararlo (`just test-down`) se pierden sus datos (tmpfs). La suite de pytest resetea además el schema en cada arranque de sesión (`DROP SCHEMA` + `alembic upgrade head`), por lo que no depende del ciclo de vida del contenedor para garantizar estado reproducible.
 
 ## Más información
 
