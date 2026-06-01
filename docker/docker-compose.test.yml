@@ -38,3 +38,40 @@ services:
       - custodiam-net
     profiles:
       - test
+
+  # API efímera para los E2E (Patrol móvil). Misma imagen que dev
+  # (config-driven, 12-factor): solo cambia el entorno. Apunta a db-test y
+  # corre `alembic upgrade head` al arrancar para tener el schema de
+  # producción sobre la BD vacía en RAM. El dispositivo la alcanza por
+  # `adb reverse tcp:8001`.
+  api-test:
+    build:
+      context: ../../custodiam-api
+      dockerfile: Dockerfile
+    image: custodiam-api:dev
+    container_name: custodiam-api-test
+    depends_on:
+      db-test:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+    environment:
+      DEBUG: "true"
+      DATABASE_URL: "postgresql+psycopg://custodiam:test@db-test:5432/custodiam_test"
+      # JWKS por la red interna; iss/azp para el token del client de test que
+      # el device obtiene por password grant (DAG). Sin el override de azp el
+      # backend rechazaría con 401 (defense-in-depth, valida azp == client).
+      KEYCLOAK_URL: "http://keycloak:8080"
+      KEYCLOAK_PUBLIC_URL: "http://localhost:8080"
+      KEYCLOAK_REALM: "custodiam"
+      KEYCLOAK_AUTHORIZED_PARTY: "custodiam-app-test"
+    command:
+      - sh
+      - -c
+      - "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - custodiam-net
+    profiles:
+      - test
