@@ -16,3 +16,9 @@
 creation_rules:
   - path_regex: \.env(\.sops)?$
     age: age1utaa5hjcj5u9rkq23vl8m73dzjdhuwat6t4fp6zndadeg2ksm4uqjlskvg
+  # Credenciales de servicio en JSON (Firebase FCM). Patrón por nombre de
+  # fichero (sin separadores de ruta) para que case igual en Windows (\) y
+  # POSIX (/). Cubre el JSON en claro y el artefacto *.sops.json. El JSON en
+  # claro está gitignored; solo se versiona el *.sops.json cifrado.
+  - path_regex: fcm-service-account.*\.json$
+    age: age1utaa5hjcj5u9rkq23vl8m73dzjdhuwat6t4fp6zndadeg2ksm4uqjlskvg

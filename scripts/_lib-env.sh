@@ -45,3 +45,19 @@ ERR
     exit 1
   fi
 }
+
+# Decrypts the Firebase FCM service-account credential from its sops-encrypted
+# form to the plaintext file that docker-compose.prod.yml bind-mounts into the
+# api container. Unlike the env file (a temp file consumed via --env-file), the
+# JSON must persist on disk while the detached container runs, so it is written
+# to a gitignored path (NOT a temp file). No-op if the encrypted credential is
+# absent (FCM simply stays disabled). sops is already guaranteed present by the
+# time this runs (resolve_env_file exits earlier if it is missing).
+decrypt_fcm_secret() {
+  local enc=docker/secrets/fcm-service-account.sops.json
+  local out=docker/secrets/fcm-service-account.json
+  [[ -f "$enc" ]] || return 0
+  SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}" \
+    sops -d --input-type json --output-type json "$enc" > "$out"
+  chmod 600 "$out" 2>/dev/null || true
+}
