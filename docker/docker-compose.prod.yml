@@ -13,3 +13,12 @@ services:
   api:
     environment:
       DEBUG: "false"
+      # Firebase Cloud Messaging (canal principal de notificaciones). La
+      # credencial se descifra de docker/secrets/fcm-service-account.sops.json
+      # a un fichero en claro (gitignored) antes del `up`
+      # (prod-up.sh -> decrypt_fcm_secret) y se monta de solo lectura abajo.
+      # FCM_PROJECT_ID se redunda (también va dentro del JSON).
+      FCM_SERVICE_ACCOUNT_JSON_PATH: /run/secrets/fcm-sa.json
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-custodiam}
+    volumes:
+      - ./secrets/fcm-service-account.json:/run/secrets/fcm-sa.json:ro

@@ -35,6 +35,9 @@ trap '[[ ${#CLEANUP_FILES[@]} -gt 0 ]] && rm -f "${CLEANUP_FILES[@]}"' EXIT INT 
 # shellcheck source=./_lib-env.sh
 source "$(dirname "$0")/_lib-env.sh"
 resolve_env_file
+# Descifra la credencial FCM al fichero en claro que el override de prod monta
+# en el contenedor api. No-op si no existe el .sops.json (FCM queda off).
+decrypt_fcm_secret
 
 # Guard 1: a previous stack (dev or tunnel) would inherit the wrong config.
 RUNNING=$(docker ps --filter "label=com.docker.compose.project=custodiam" --format '{{.Names}}' | wc -l | tr -d ' ')

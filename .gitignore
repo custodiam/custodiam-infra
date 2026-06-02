@@ -3,6 +3,12 @@
 docker/.env
 !docker/.env.sops
 
+# Credenciales de servicio (Firebase FCM, etc.): el JSON en claro queda
+# gitignored; solo se versiona la versión cifrada *.sops.json. El arranque
+# (prod-up.sh) descifra el .sops.json al fichero en claro antes del `up`.
+docker/secrets/*.json
+!docker/secrets/*.sops.json
+
 # Datos locales
 *.bak
 *.sql
