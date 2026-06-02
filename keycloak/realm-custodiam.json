@@ -969,6 +969,52 @@
       ]
     },
     {
+      "id": "c0ffee00-0000-4000-8000-00000000e2e2",
+      "clientId": "custodiam-app-test",
+      "name": "Custodiam App (E2E tests)",
+      "description": "Test-only client with Direct Access Grants (password grant) for E2E Patrol flows. Mirrors custodiam-app scopes so the access token carries the same `roles` claim. NEVER enable this client in production.",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "redirectUris": [],
+      "webOrigins": [],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "publicClient": true,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "use.refresh.tokens": "true"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "custodiam-roles",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "organization",
+        "microprofile-jwt"
+      ]
+    },
+    {
       "id": "dae0954f-3130-40ce-b76c-c77fc57ea741",
       "clientId": "realm-management",
       "name": "${client_realm-management}",

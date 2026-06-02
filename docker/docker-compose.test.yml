@@ -1,0 +1,77 @@
+# docker/docker-compose.test.yml
+#
+# Flavor de TEST (profile `test`). Instancia PostgreSQL efímera y aislada
+# para la suite de pytest de la API y para los E2E (Patrol), de modo que
+# NINGÚN test escriba en la BD de desarrollo (`custodiam-db`). Sustituye al
+# antiguo `docker run` ad-hoc del 5433 que el conftest levantaba a mano.
+#
+# Uso (desde custodiam-infra/, o vía `just test-up`):
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.test.yml \
+#     --profile test up -d --wait db-test
+#
+# Efímera: los datos viven en tmpfs (RAM) y se pierden al parar el
+# contenedor. Aun así, la suite resetea el schema en cada arranque de sesión
+# (DROP SCHEMA + `alembic upgrade head`) para reproducibilidad — no depender
+# del ciclo de vida del contenedor para garantizar estado limpio.
+#
+# Versión alineada con producción (15-alpine), no la 16 que usaba el ad-hoc.
+name: custodiam
+
+services:
+  db-test:
+    image: postgres:15-alpine
+    container_name: custodiam-db-test
+    environment:
+      POSTGRES_USER: custodiam
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: custodiam_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U custodiam -d custodiam_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - custodiam-net
+    profiles:
+      - test
+
+  # API efímera para los E2E (Patrol móvil). Misma imagen que dev
+  # (config-driven, 12-factor): solo cambia el entorno. Apunta a db-test y
+  # corre `alembic upgrade head` al arrancar para tener el schema de
+  # producción sobre la BD vacía en RAM. El dispositivo la alcanza por
+  # `adb reverse tcp:8001`.
+  api-test:
+    build:
+      context: ../../custodiam-api
+      dockerfile: Dockerfile
+    image: custodiam-api:dev
+    container_name: custodiam-api-test
+    depends_on:
+      db-test:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+    environment:
+      DEBUG: "true"
+      DATABASE_URL: "postgresql+psycopg://custodiam:test@db-test:5432/custodiam_test"
+      # JWKS por la red interna; iss/azp para el token del client de test que
+      # el device obtiene por password grant (DAG). Sin el override de azp el
+      # backend rechazaría con 401 (defense-in-depth, valida azp == client).
+      KEYCLOAK_URL: "http://keycloak:8080"
+      KEYCLOAK_PUBLIC_URL: "http://localhost:8080"
+      KEYCLOAK_REALM: "custodiam"
+      KEYCLOAK_AUTHORIZED_PARTY: "custodiam-app-test"
+    command:
+      - sh
+      - -c
+      - "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - custodiam-net
+    profiles:
+      - test

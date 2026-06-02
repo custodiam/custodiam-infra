@@ -37,6 +37,18 @@ prod:
 down:
     ./scripts/down.sh
 
+# Forzar build sin cache de un servicio y recrear su contenedor. Útil
+# cuando se sospecha que la layer cache de Docker se ha quedado podrida
+# (síntoma típico: el contenedor arranca pero falla con ModuleNotFoundError
+# o equivalente tras haber actualizado pyproject.toml / Dockerfile). El
+# parámetro `service` por defecto es `api`; usa `just rebuild web` para
+# el frontend.
+rebuild service="api":
+    docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+      build --no-cache {{service}}
+    docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml \
+      --profile dev up -d --force-recreate --no-deps {{service}}
+
 # Sembrar las 7 cuentas de test (vol1, jefe1, coord1, tesor1, admin, reviewstore, superadmin) en el realm de DESARROLLO
 seed:
     ./scripts/seed-test-users.sh
@@ -46,6 +58,27 @@ seed-prod:
     COMPOSE_OVERRIDE=docker/docker-compose.prod.yml \
     KC_BASE=https://auth.custodiam.es \
     ./scripts/seed-test-users.sh
+
+# === TESTING (flavor `test`: db-test efímero, aislado de la BD de dev) ===
+
+# Levantar el `db-test` efímero (tmpfs, postgres:15-alpine) que usan la suite
+# de pytest de la API y los E2E. La suite resetea el schema sola en cada
+# arranque (DROP SCHEMA + alembic upgrade); esto solo garantiza el contenedor.
+test-up:
+    docker compose -f docker/docker-compose.yml -f docker/docker-compose.test.yml \
+      --profile test up -d --wait db-test
+
+# Recrear el `db-test` desde cero (vacío). Para los E2E, que necesitan estado
+# limpio entre corridas; la suite de pytest no lo necesita.
+test-reset:
+    docker compose -f docker/docker-compose.yml -f docker/docker-compose.test.yml \
+      --profile test up -d --force-recreate --wait db-test
+
+# Parar y borrar SOLO el `db-test` (rm -sf, nunca `down` que bajaría todo el
+# stack — ver gotcha de operación con --profile down).
+test-down:
+    docker compose -f docker/docker-compose.yml -f docker/docker-compose.test.yml \
+      --profile test rm -sf db-test
 
 # Ver los logs del servicio Keycloak (Ctrl+C para salir)
 logs-keycloak:

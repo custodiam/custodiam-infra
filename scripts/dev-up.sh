@@ -33,11 +33,20 @@ source "$(dirname "$0")/_lib-env.sh"
 resolve_env_file
 
 echo "==> Starting Custodiam dev stack (base + dev override)"
+# `--build` is required so a `git pull` that brings new runtime deps in
+# `custodiam-api/pyproject.toml` (or any change to `custodiam-api/Dockerfile`
+# / `custodiam-app/Dockerfile`) is picked up on the next `just dev`.
+# Without it Docker Compose reuses the cached `custodiam-api:dev` /
+# `custodiam-app:dev` image, the container starts with stale code, and
+# uvicorn typically crashes on import. Incremental builds are nearly
+# free thanks to BuildKit layer caching (uv sync layer cached by
+# pyproject.toml + uv.lock); only changes trigger work. For a truly
+# clean rebuild see `just rebuild [service]`.
 docker compose \
   --env-file "$ENV_FILE" \
   -f docker/docker-compose.yml \
   -f docker/docker-compose.dev.yml \
-  up -d
+  up -d --build
 
 echo
 echo "==> Stack status:"
