@@ -12,6 +12,11 @@
 .env.sops text eol=lf
 .sops.yaml text eol=lf
 
+# Credenciales de servicio cifradas con sops (Firebase FCM, etc.): mismo
+# problema de MAC que .env.sops — un checkout con core.autocrlf=true las
+# rompería al cambiar LF→CRLF. Forzar LF para que descifren en cualquier SO.
+docker/secrets/*.json text eol=lf
+
 # Dotenv files (plain and templates) stay LF too. They get read by
 # docker compose and by shell scripts that don't tolerate CRLF either.
 .env text eol=lf
