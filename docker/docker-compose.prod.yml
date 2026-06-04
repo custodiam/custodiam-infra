@@ -8,6 +8,14 @@
 services:
   keycloak:
     environment:
+      # URL pública COMPLETA (con esquema). Hace que Keycloak use https y el
+      # hostname público en TODAS las URLs de frontend —incluidos los enlaces
+      # de los emails transaccionales (set-password, verify-email, reset)—
+      # aunque el email se dispare por la red interna (http://keycloak:8080)
+      # sin cabeceras x-forwarded-proto. Con solo el hostname (base
+      # `auth.${DOMAIN}`), el esquema se infería de la petición y los enlaces
+      # de email salían como `http://auth.${DOMAIN}:8080` (rotos).
+      KC_HOSTNAME: https://auth.${DOMAIN:-localhost}
       KC_HOSTNAME_STRICT: "true"
 
   api:

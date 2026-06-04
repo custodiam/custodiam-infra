@@ -3,7 +3,10 @@
 # Bring up the Custodiam production stack on the host.
 #
 # Applies the prod override on top of the base compose file, which:
-#   - keeps KC_HOSTNAME=auth.${DOMAIN} (base value, public);
+#   - overrides KC_HOSTNAME to the full URL https://auth.${DOMAIN} so every
+#     frontend URL (including transactional email links) uses https and the
+#     public host, even when emails are triggered over the internal http
+#     connection (the bare hostname made links come out as http://...:8080);
 #   - tightens to KC_HOSTNAME_STRICT=true (Host header validation);
 #   - sets DEBUG=false on the API.
 #
