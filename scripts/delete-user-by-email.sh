@@ -102,13 +102,18 @@ for u in json.load(sys.stdin):
 )
 
 # ── 3. Look up the custodiam voluntario(s) by email ───────────────────
+# IMPORTANT: feed the query via stdin (heredoc), NOT `psql -c`. With `-c`,
+# psql does NOT perform :'var' interpolation, so the query errors out; if
+# that error is swallowed the lookup falsely reports "not found" for a user
+# that IS in the DB (and a confirmed delete would then wipe only Keycloak).
+# Reading from stdin interpolates the variable correctly.
 echo "==> Buscando en la BBDD custodiam el email '$EMAIL'"
 DB_ROWS=$(
-  dc exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -tA \
-    -v email="$EMAIL" \
-    -c "SELECT id || '  ' || nombre FROM voluntarios WHERE email = :'email';" \
-    2>/dev/null | sed '/^$/d' || true
+  dc exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -tA -v email="$EMAIL" 2>/dev/null <<'EOSQL'
+SELECT id || '  ' || nombre FROM voluntarios WHERE email = :'email';
+EOSQL
 )
+DB_ROWS=$(printf '%s\n' "$DB_ROWS" | sed '/^$/d')
 
 # ── Summary + confirmation ────────────────────────────────────────────
 echo
