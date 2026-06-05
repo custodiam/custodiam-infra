@@ -59,6 +59,19 @@ seed-prod:
     KC_BASE=https://auth.custodiam.es \
     ./scripts/seed-test-users.sh
 
+# Borrar un usuario (Keycloak + BBDD custodiam) por email en DESARROLLO.
+# Limpia cuentas de prueba de ambos sistemas. Pide confirmación (añade --yes para saltarla).
+# Uso: just delete-user alguien@ejemplo.com
+delete-user email *flags:
+    ./scripts/delete-user-by-email.sh {{email}} {{flags}}
+
+# Igual que delete-user pero contra PRODUCCIÓN (auth.custodiam.es), mismo patrón que seed-prod.
+# Uso: just delete-user-prod alguien@ejemplo.com
+delete-user-prod email *flags:
+    COMPOSE_OVERRIDE=docker/docker-compose.prod.yml \
+    KC_BASE=https://auth.custodiam.es \
+    ./scripts/delete-user-by-email.sh {{email}} {{flags}}
+
 # === TESTING (flavor `test`: db-test efímero, aislado de la BD de dev) ===
 
 # Levantar el `db-test` efímero (tmpfs, postgres:15-alpine) que usan la suite

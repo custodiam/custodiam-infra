@@ -73,6 +73,13 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: https://auth.${DOMAIN:-localhost}
       KEYCLOAK_REALM: custodiam
+      # Credenciales de la Admin API de Keycloak. Sin la contraseña, el
+      # cliente Admin del backend queda deshabilitado (enabled=False) y el
+      # alta de voluntarios NO crea la cuenta en Keycloak ni envía el email
+      # de onboarding (falla en silencio porque es best-effort). Se reutiliza
+      # el mismo par admin/password que el bootstrap de Keycloak (mismo .env).
+      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_PASSWORD}
       NTFY_URL: http://ntfy:80
     depends_on:
       postgres:
